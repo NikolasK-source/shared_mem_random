@@ -66,6 +66,9 @@ int main(int argc, char **argv) {
 
     if (args.count("help")) {
         std::cout << options.help() << std::endl;
+        std::cout << std::endl;
+        std::cout << "This application uses the following libraries:" << std::endl;
+        std::cout << "  - cxxopts by jarro2783 (https://github.com/jarro2783/cxxopts)" << std::endl;
         exit(EX_OK);
     }
 

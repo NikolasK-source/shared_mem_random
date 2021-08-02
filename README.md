@@ -27,3 +27,7 @@ SHM_Random [OPTION...]
   -h, --help           print usage
 
 ```
+
+## Libraries
+This application uses the following libraries:
+- cxxopts by jarro2783 (https://github.com/jarro2783/cxxopts)
