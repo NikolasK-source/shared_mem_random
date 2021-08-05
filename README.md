@@ -7,7 +7,7 @@ This application fills a shared memory with random values.
 git submodule init
 mkdir build
 cd build
-cmake .. -DCMAKE_CXX_COMPILER=$(which clang++) -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_CXX_COMPILER=$(which clang++) -DCMAKE_BUILD_TYPE=Release -DCLANG_FORMAT=OFF
 cmake -build . 
 ```
 
