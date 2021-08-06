@@ -19,7 +19,7 @@ SHM_Random [OPTION...]
   -m, --mask arg       optional bitmask (as hex value) that is applied to the generated random values
   -n, --name arg       mandatory name of the shared memory object
   -i, --interval arg   random value generation interval in milliseconds (default: 1000)
-  -l, --limit arg      random interval limit. Runs until termination signal if not specified. (default: 0)
+  -l, --limit arg      random interval limit. Use 0 for no limit (--> run until SIGINT / SIGTERM). (default: 0)
   -h, --help           print usage
 ```
 
