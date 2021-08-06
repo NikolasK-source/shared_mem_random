@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
                           "random value generation interval in milliseconds",
                           cxxopts::value<std::size_t>()->default_value("1000"))
                          ("l,limit",
-                          "random interval limit. Runs until termination signal if not specified.",
+                          "random interval limit. Use 0 for no limit (--> run until SIGINT / SIGTERM).",
                           cxxopts::value<std::size_t>()->default_value("0"))
                          ("h,help",
                           "print usage");
