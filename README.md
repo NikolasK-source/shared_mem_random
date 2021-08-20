@@ -5,10 +5,11 @@ This application fills a shared memory with random values.
 ## Build
 ```
 git submodule init
+git submodule update
 mkdir build
 cd build
 cmake .. -DCMAKE_CXX_COMPILER=$(which clang++) -DCMAKE_BUILD_TYPE=Release -DCLANG_FORMAT=OFF
-cmake -build . 
+cmake --build .
 ```
 
 ## Use
