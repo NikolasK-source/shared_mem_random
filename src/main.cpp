@@ -53,7 +53,9 @@ int main(int argc, char **argv) {
                           "random interval limit. Use 0 for no limit (--> run until SIGINT / SIGTERM).",
                           cxxopts::value<std::size_t>()->default_value("0"))
                          ("h,help",
-                          "print usage");
+                          "print usage")
+                         ("v,version",
+                          "print version information");
     // clang-format on
 
     cxxopts::ParseResult args;
@@ -74,7 +76,7 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
         std::cout << "MIT License:" << std::endl;
         std::cout << std::endl;
-        std::cout << "Copyright (c) 2021 Nikolas Koesling" << std::endl;
+        std::cout << "Copyright (c) 2021-2022 Nikolas Koesling" << std::endl;
         std::cout << std::endl;
         std::cout << "Permission is hereby granted, free of charge, to any person obtaining a copy" << std::endl;
         std::cout << "of this software and associated documentation files (the \"Software\"), to deal" << std::endl;
@@ -93,6 +95,11 @@ int main(int argc, char **argv) {
         std::cout << "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM," << std::endl;
         std::cout << "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE" << std::endl;
         std::cout << "SOFTWARE." << std::endl;
+        exit(EX_OK);
+    }
+
+    if (args.count("version")) {
+        std::cout << exe_name << ' ' << PROJECT_VERSION << std::endl;
         exit(EX_OK);
     }
 
