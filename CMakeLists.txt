@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.13.4 FATAL_ERROR)
 # ======================================================================================================================
 
 # project
-project(SHM_Random LANGUAGES CXX VERSION 1.0.1)
+project(SHM_Random LANGUAGES CXX VERSION 1.0.2)
 
 # settings
 set(Target "SHM_Random")          # Executable name (without file extension!)
