@@ -84,9 +84,11 @@ int main(int argc, char **argv) {
         exit(EX_OK);
     }
 
+    // print version
     if (args.count("version")) {
-        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << std::endl;
-        exit(EX_OK);
+        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << " (compiled with " << COMPILER_INFO << " on "
+                  << SYSTEM_INFO << ')' << std::endl;
+        return EX_OK;
     }
 
     // print licenses
