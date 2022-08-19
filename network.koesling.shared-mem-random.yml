@@ -2,11 +2,11 @@ id: network.koesling.shared-mem-random
 runtime: org.freedesktop.Platform
 runtime-version: '21.08'
 sdk: org.freedesktop.Sdk
-command: SHM_Random
+command: shared-mem-random
 finish-args:
   - --device=shm
 modules:
-  - name: SHM_Random
+  - name: shared-mem-random
     buildsystem: simple
     build-commands:
     # build
@@ -16,8 +16,7 @@ modules:
 
     # install
     - mkdir -p "${FLATPAK_DEST}/bin"
-    - cp build/SHM_Random ${FLATPAK_DEST}/bin
-    - ls -lah ${FLATPAK_DEST}
+    - cp build/shared-mem-random ${FLATPAK_DEST}/bin
     sources:
       - type: git
         branch: release
