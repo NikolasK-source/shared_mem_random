@@ -5,18 +5,18 @@
 
 #include "license.hpp"
 
+#include "cxxshm.hpp"
 #include <csignal>
 #include <cxxopts.hpp>
 #include <fcntl.h>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sysexits.h>
 #include <unistd.h>
-#include <memory>
-#include "cxxshm.hpp"
 
 static volatile bool terminate = false;
 
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
     std::unique_ptr<cxxshm::SharedMemory> shm;
     try {
         shm = std::make_unique<cxxshm::SharedMemory>(shm_name);
-    } catch (std::exception& e) {
+    } catch (std::exception &e) {
         std::cerr << e.what() << std::endl;
         return EX_OSERR;
     }
