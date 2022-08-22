@@ -15,6 +15,8 @@
 #include <sys/stat.h>
 #include <sysexits.h>
 #include <unistd.h>
+#include <memory>
+#include "cxxshm.hpp"
 
 static volatile bool terminate = false;
 
@@ -81,6 +83,7 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
         std::cout << "This application uses the following libraries:" << std::endl;
         std::cout << "  - cxxopts by jarro2783 (https://github.com/jarro2783/cxxopts)" << std::endl;
+        std::cout << "  - cxxshm (https://github.com/NikolasK-source/cxxshm)" << std::endl;
         exit(EX_OK);
     }
 
@@ -152,34 +155,20 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (signal(SIGINT, sig_term_handler) || signal(SIGTERM, sig_term_handler)) {
+    if (signal(SIGINT, sig_term_handler) == SIG_ERR || signal(SIGTERM, sig_term_handler) == SIG_ERR) {
         perror("signal");
         exit(EX_OSERR);
     }
 
-    // open shared memory
-    int fd = shm_open(shm_name.c_str(), O_RDWR, 0660);
-    if (fd < 0) {
-        perror(("failed to open shared memory '" + shm_name + '\'').c_str());
-        exit(EX_OSERR);
+    std::unique_ptr<cxxshm::SharedMemory> shm;
+    try {
+        shm = std::make_unique<cxxshm::SharedMemory>(shm_name);
+    } catch (std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return EX_OSERR;
     }
 
-    // determine size of shared memory
-    struct stat shm_stats {};
-    if (fstat(fd, &shm_stats)) {
-        perror("fstat");
-        close(fd);
-        exit(EX_OSERR);
-    }
-    const auto SIZE = static_cast<std::size_t>(shm_stats.st_size);
-
-    // map shared memory
-    void *data = mmap(nullptr, SIZE, PROT_WRITE, MAP_SHARED, fd, 0);
-    if (data == MAP_FAILED || data == nullptr) {
-        perror("mmap");
-        if (close(fd)) { perror("close"); }
-        exit(EX_OSERR);
-    }
+    const auto SIZE = shm->get_size();
 
     std::cerr << "Opened shared memory '" << shm_name << "'. Size: " << SIZE << (SIZE != 1 ? " bytes" : " byte") << '.'
               << std::endl;
@@ -196,7 +185,7 @@ int main(int argc, char **argv) {
     switch (alignment) {
         case BYTE:
             while (!terminate) {
-                random_data<uint8_t>(data, shm_elements, bitmask);
+                random_data<uint8_t>(shm->get_addr(), shm_elements, bitmask);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -206,7 +195,7 @@ int main(int argc, char **argv) {
             break;
         case WORD:
             while (!terminate) {
-                random_data<uint16_t>(data, shm_elements, bitmask);
+                random_data<uint16_t>(shm->get_addr(), shm_elements, bitmask);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -216,7 +205,7 @@ int main(int argc, char **argv) {
             break;
         case DWORD:
             while (!terminate) {
-                random_data<uint32_t>(data, shm_elements, bitmask);
+                random_data<uint32_t>(shm->get_addr(), shm_elements, bitmask);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -226,7 +215,7 @@ int main(int argc, char **argv) {
             break;
         case QWORD:
             while (!terminate) {
-                random_data<uint64_t>(data, shm_elements, bitmask);
+                random_data<uint64_t>(shm->get_addr(), shm_elements, bitmask);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -235,10 +224,6 @@ int main(int argc, char **argv) {
             }
             break;
     }
-
-    // clean
-    if (munmap(data, SIZE)) { perror("munmap"); }
-    if (close(fd)) { perror("close"); }
 
     std::cerr << "Terminating..." << std::endl;
 }
