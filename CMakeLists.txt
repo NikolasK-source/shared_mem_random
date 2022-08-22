@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.13.4 FATAL_ERROR)
 # ======================================================================================================================
 
 # project
-project(shared-mem-random LANGUAGES CXX VERSION 1.0.4)
+project(shared-mem-random LANGUAGES CXX VERSION 1.0.5)
 
 # settings
 set(Target "shared-mem-random")          # Executable name (without file extension!)
