@@ -39,7 +39,13 @@ shared-mem-random -n mem -a 2 -m 0x1
 shared-mem-random -n mem -l 1
 ```
 
-## Using the Flatpak package
+## Install
+
+### Using the Modbus Collection Flapak Package: Shared Memory Modbus
+[SHM-Modbus](https://nikolask-source.github.io/SHM_Modbus/) is a collection of the shared memory modbus tools.
+It is available as flatpak and published on flathub as ```network.koesling.shm-modbs```.
+
+### Using the Standalone Flatpak package
 The flatpak package can be installed via the .flatpak file.
 This can be downloaded from the GitHub [projects release page](https://github.com/NikolasK-source/shared_mem_random/releases):
 
@@ -56,7 +62,7 @@ To enable calling with ```shared-mem-random``` [this script](https://gist.github
 In order to be executable everywhere, the path in which the script is placed must be in the ```PATH``` environment variable.
 
 
-## Build from Source
+### Build from Source
 
 The following packages are required for building the application:
 - cmake
