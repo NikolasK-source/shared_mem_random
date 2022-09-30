@@ -6,6 +6,7 @@
 #include "license.hpp"
 
 #include "cxxshm.hpp"
+#include <algorithm>
 #include <csignal>
 #include <cxxopts.hpp>
 #include <fcntl.h>
@@ -14,9 +15,7 @@
 #include <memory>
 #include <random>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <sysexits.h>
-#include <unistd.h>
 
 static volatile bool terminate = false;
 
@@ -61,6 +60,12 @@ int main(int argc, char **argv) {
                          ("l,limit",
                           "random interval limit. Use 0 for no limit (--> run until SIGINT / SIGTERM).",
                           cxxopts::value<std::size_t>()->default_value("0"))
+                         ("o,offset",
+                          "skip the first arg bytes of the shared memory",
+                          cxxopts::value<std::size_t>()->default_value("0"))
+                         ("e,elements",
+                          "maximum number of elements to work on (size depends on alignment)",
+                          cxxopts::value<std::size_t>())
                          ("h,help",
                           "print usage")
                          ("v,version",
@@ -74,17 +79,20 @@ int main(int argc, char **argv) {
         args = options.parse(argc, argv);
     } catch (cxxopts::OptionParseException &e) {
         std::cerr << "Failed to parse arguments: " << e.what() << '.' << std::endl;
-        exit(EX_USAGE);
+        return EX_USAGE;
     }
 
     if (args.count("help")) {
         options.set_width(120);
         std::cout << options.help() << std::endl;
         std::cout << std::endl;
+        std::cout << "Note: If specified, the offset should be an integer multiple of alignment." << std::endl;
+        std::cout << "      Incorrect alignment can significantly reduce performance." << std::endl;
+        std::cout << std::endl;
         std::cout << "This application uses the following libraries:" << std::endl;
         std::cout << "  - cxxopts by jarro2783 (https://github.com/jarro2783/cxxopts)" << std::endl;
         std::cout << "  - cxxshm (https://github.com/NikolasK-source/cxxshm)" << std::endl;
-        exit(EX_OK);
+        return EX_OK;
     }
 
     // print version
@@ -97,7 +105,7 @@ int main(int argc, char **argv) {
     // print licenses
     if (args.count("license")) {
         print_licenses(std::cout);
-        exit(EX_OK);
+        return EX_OK;
     }
 
     const auto name_count = args.count("name");
@@ -109,7 +117,7 @@ int main(int argc, char **argv) {
             std::cerr << "multiple definitions of '--name' are not allowed." << std::endl;
         }
         std::cerr << "Use '" << exe_name << " --help' for more information." << std::endl;
-        exit(EX_USAGE);
+        return EX_USAGE;
     }
     const std::string shm_name = args["name"].as<std::string>();
 
@@ -119,7 +127,7 @@ int main(int argc, char **argv) {
     if (alignment_count > 1) {
         std::cerr << "multiple definitions of '--alignment' are not allowed." << std::endl;
         std::cerr << "Use '" << exe_name << " --help' for more information." << std::endl;
-        exit(EX_USAGE);
+        return EX_USAGE;
     } else if (alignment_count == 1) {
         const auto tmp = args["alignment"].as<int>();
         switch (tmp) {
@@ -130,7 +138,7 @@ int main(int argc, char **argv) {
             default:
                 std::cerr << tmp << " is not a valid value for '--alignment'" << std::endl;
                 std::cerr << "Use '" << exe_name << " --help' for more information." << std::endl;
-                exit(EX_USAGE);
+                return EX_USAGE;
         }
     }
 
@@ -142,7 +150,7 @@ int main(int argc, char **argv) {
     if (mask_count > 1) {
         std::cerr << "multiple definitions of '--mask' are not allowed." << std::endl;
         std::cerr << "Use '" << exe_name << " --help' for more information." << std::endl;
-        exit(EX_USAGE);
+        return EX_USAGE;
     } else if (mask_count == 1) {
         const auto &mask = args["mask"].as<std::string>();
         try {
@@ -151,13 +159,13 @@ int main(int argc, char **argv) {
         } catch (const std::invalid_argument &) {
             std::cerr << '\'' << mask << "' is not a valid value for '--mask'" << std::endl;
             std::cerr << "Use '" << exe_name << " --help' for more information." << std::endl;
-            exit(EX_USAGE);
+            return EX_USAGE;
         }
     }
 
     if (signal(SIGINT, sig_term_handler) == SIG_ERR || signal(SIGTERM, sig_term_handler) == SIG_ERR) {
         perror("signal");
-        exit(EX_OSERR);
+        return EX_OSERR;
     }
 
     std::unique_ptr<cxxshm::SharedMemory> shm;
@@ -168,24 +176,38 @@ int main(int argc, char **argv) {
         return EX_OSERR;
     }
 
-    const auto SIZE = shm->get_size();
+    const auto OFFSET = args["offset"].as<std::size_t>();
+    const auto SIZE   = OFFSET > shm->get_size() ? 0 : (shm->get_size() - OFFSET);
 
-    std::cerr << "Opened shared memory '" << shm_name << "'. Size: " << SIZE << (SIZE != 1 ? " bytes" : " byte") << '.'
-              << std::endl;
+    std::cerr << "Opened shared memory '" << shm_name << "'. Size: " << shm->get_size()
+              << (shm->get_size() != 1 ? " bytes" : " byte") << '.';
+    if (OFFSET) std::cerr << " (Effective size: " << SIZE << (SIZE != 1 ? " bytes" : " byte") << ")";
+    std::cerr << std::endl;
+
+    if (OFFSET % args["alignment"].as<int>() != 0)
+        std::cerr << "WARNING: Invalid alignment detected. Performance issues possible." << std::endl;
+
 
     const struct timespec sleep_time {
         static_cast<__time_t>(random_interval_ms / 1000),
                 static_cast<__syscall_slong_t>((random_interval_ms % 1000) * 1000000)
     };
 
-    const std::size_t shm_elements = SIZE / static_cast<std::size_t>(alignment);
+    std::size_t shm_elements = SIZE / static_cast<std::size_t>(alignment);
+    if (args.count("elements")) { shm_elements = std::min(shm_elements, args["elements"].as<std::size_t>()); }
+
+    if (shm_elements == 0) {
+        std::cerr << "no elements to work on. (Either is the shared memory to small to create at least one element ";
+        std::cerr << "with the specified allignment or the parameter elements is 0.)" << std::endl;
+        return EX_DATAERR;
+    }
 
     // MAIN loop
     std::size_t counter = 0;
     switch (alignment) {
         case BYTE:
             while (!terminate) {
-                random_data<uint8_t>(shm->get_addr(), shm_elements, bitmask);
+                random_data<uint8_t>(shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -195,7 +217,7 @@ int main(int argc, char **argv) {
             break;
         case WORD:
             while (!terminate) {
-                random_data<uint16_t>(shm->get_addr(), shm_elements, bitmask);
+                random_data<uint16_t>(shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -205,7 +227,7 @@ int main(int argc, char **argv) {
             break;
         case DWORD:
             while (!terminate) {
-                random_data<uint32_t>(shm->get_addr(), shm_elements, bitmask);
+                random_data<uint32_t>(shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -215,7 +237,7 @@ int main(int argc, char **argv) {
             break;
         case QWORD:
             while (!terminate) {
-                random_data<uint64_t>(shm->get_addr(), shm_elements, bitmask);
+                random_data<uint64_t>(shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
