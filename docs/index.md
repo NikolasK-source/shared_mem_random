@@ -46,7 +46,7 @@ The application is available as [shared-mem-random](https://aur.archlinux.org/pa
 See the [Arch Wiki](https://wiki.archlinux.org/title/Arch_User_Repository) for information about how to install AUR packages.
 
 
-### Using the Modbus Collection Flapak Package: Shared Memory Modbus
+### Using the Modbus Collection Flatpak Package: Shared Memory Modbus
 [SHM-Modbus](https://nikolask-source.github.io/SHM_Modbus/) is a collection of the shared memory modbus tools.
 It is available as flatpak and published on flathub as ```network.koesling.shm-modbs```.
 
