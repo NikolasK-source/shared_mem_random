@@ -66,6 +66,15 @@ int main(int argc, char **argv) {
                          ("e,elements",
                           "maximum number of elements to work on (size depends on alignment)",
                           cxxopts::value<std::size_t>())
+                         ("c,create",
+                          "create shared memory with given size in byte",
+                          cxxopts::value<std::size_t>())
+                         ("force",
+                          "create shared memory even if it exists. (Only relevant if -c is used.)")
+                         ("p,permissions",
+                          "permission bits that are applied when creating a shared memory. "
+                          "(Only relevant if -c is used.) Default: 0660",
+                          cxxopts::value<std::string>()->default_value("0660"))
                          ("h,help",
                           "print usage")
                          ("v,version",
@@ -169,11 +178,35 @@ int main(int argc, char **argv) {
     }
 
     std::unique_ptr<cxxshm::SharedMemory> shm;
-    try {
-        shm = std::make_unique<cxxshm::SharedMemory>(shm_name);
-    } catch (std::exception &e) {
-        std::cerr << e.what() << std::endl;
-        return EX_OSERR;
+
+    if (args.count("create")) {
+        const auto shm_size      = args["create"].as<std::size_t>();
+        const auto shm_exclusive = !args.count("force");
+        const auto shm_mode_str  = args["permissions"].as<std::string>();
+
+        mode_t      mode;
+        bool        fail = false;
+        std::size_t idx  = 0;
+        try {
+            mode = std::stoul(shm_mode_str, &idx, 0);
+        } catch (const std::exception &) { fail = true; }
+        fail = fail || idx != shm_mode_str.size();
+
+        if (fail) throw std::invalid_argument("Failed to parse permissions '" + shm_mode_str + '\'');
+
+        try {
+            shm = std::make_unique<cxxshm::SharedMemory>(shm_name, shm_size, false, shm_exclusive, mode);
+        } catch (std::exception &e) {
+            std::cerr << e.what() << std::endl;
+            return EX_OSERR;
+        }
+    } else {
+        try {
+            shm = std::make_unique<cxxshm::SharedMemory>(shm_name);
+        } catch (std::exception &e) {
+            std::cerr << e.what() << std::endl;
+            return EX_OSERR;
+        }
     }
 
     const auto OFFSET = args["offset"].as<std::size_t>();
