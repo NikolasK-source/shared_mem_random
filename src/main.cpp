@@ -5,6 +5,7 @@
 
 #include "license.hpp"
 
+#include "cxxsemaphore.hpp"
 #include "cxxshm.hpp"
 #include <algorithm>
 #include <csignal>
@@ -14,7 +15,6 @@
 #include <iostream>
 #include <memory>
 #include <random>
-#include <sys/mman.h>
 #include <sysexits.h>
 
 static volatile bool terminate = false;
@@ -32,56 +32,71 @@ static std::default_random_engine re(rd());
  * @param bitmask bitmask that is applied to the generated random values
  */
 template <typename T>
-inline void random_data(void *data, std::size_t elements, std::size_t bitmask = ~static_cast<T>(0)) {
+inline void random_data(void                                     *data,
+                        std::size_t                               elements,
+                        std::size_t                               bitmask,
+                        std::unique_ptr<cxxsemaphore::Semaphore> &semaphore,
+                        const timespec                            semaphore_max_time) {
     static_assert(sizeof(T) <= sizeof(bitmask), "must be compiled as 64 bit application.");
     static std::uniform_int_distribution<T> dist(0, std::numeric_limits<T>::max());
+
+    if (semaphore) {
+        if (!semaphore->wait(semaphore_max_time)) {
+            std::cerr << " WARNING: Failed to acquire semaphore '" << semaphore->get_name()
+                      << "' within a half intervall" << std::endl;
+            // TODO semaphore error counter
+        }
+    }
+
     for (std::size_t i = 0; i < elements; ++i) {
         reinterpret_cast<T *>(data)[i] = dist(re) & static_cast<T>(bitmask);
     }
+
+    if (semaphore && semaphore->is_acquired()) semaphore->post();
 }
 
 int main(int argc, char **argv) {
     const std::string exe_name = std::filesystem::path(argv[0]).filename().string();
     cxxopts::Options  options(exe_name, "Write random values to a shared memory.");
 
-    // clang-format off
     options.add_options()("a,alignment",
                           "use the given byte alignment to generate random values. (1,2,4,8)",
-                          cxxopts::value<int>()->default_value("1"))
-                         ("m,mask",
+                          cxxopts::value<int>()->default_value("1"));
+    options.add_options()("m,mask",
                           "optional bitmask (as hex value) that is applied to the generated random values",
-                          cxxopts::value<std::string>())
-                         ("n,name",
-                          "mandatory name of the shared memory object",
-                          cxxopts::value<std::string>())
-                         ("i,interval",
+                          cxxopts::value<std::string>());
+    options.add_options()("n,name", "mandatory name of the shared memory object", cxxopts::value<std::string>());
+    options.add_options()("i,interval",
                           "random value generation interval in milliseconds",
-                          cxxopts::value<std::size_t>()->default_value("1000"))
-                         ("l,limit",
+                          cxxopts::value<std::size_t>()->default_value("1000"));
+    options.add_options()("l,limit",
                           "random interval limit. Use 0 for no limit (--> run until SIGINT / SIGTERM).",
-                          cxxopts::value<std::size_t>()->default_value("0"))
-                         ("o,offset",
+                          cxxopts::value<std::size_t>()->default_value("0"));
+    options.add_options()("o,offset",
                           "skip the first arg bytes of the shared memory",
-                          cxxopts::value<std::size_t>()->default_value("0"))
-                         ("e,elements",
+                          cxxopts::value<std::size_t>()->default_value("0"));
+    options.add_options()("e,elements",
                           "maximum number of elements to work on (size depends on alignment)",
-                          cxxopts::value<std::size_t>())
-                         ("c,create",
-                          "create shared memory with given size in byte",
-                          cxxopts::value<std::size_t>())
-                         ("force",
-                          "create shared memory even if it exists. (Only relevant if -c is used.)")
-                         ("p,permissions",
+                          cxxopts::value<std::size_t>());
+    options.add_options()("c,create", "create shared memory with given size in byte", cxxopts::value<std::size_t>());
+    options.add_options()("force", "create shared memory even if it exists. (Only relevant if -c is used.)");
+    options.add_options()("p,permissions",
                           "permission bits that are applied when creating a shared memory. "
                           "(Only relevant if -c is used.) Default: 0660",
-                          cxxopts::value<std::string>()->default_value("0660"))
-                         ("h,help",
-                          "print usage")
-                         ("v,version",
-                          "print version information")
-                         ("license",
-                          "show licenses");
-    // clang-format on
+                          cxxopts::value<std::string>()->default_value("0660"));
+    options.add_options()("semaphore",
+                          "protect the shared memory with a named semaphore against simultaneous access. "
+                          "If -c is used, the semaphore is created, otherwise an existing semaphore is required.",
+                          cxxopts::value<std::string>());
+    options.add_options()("semaphore-force",
+                          "Force the use of the semaphore even if it already exists. "
+                          "Do not use this option per default! "
+                          "It should only be used if the semaphore of an improperly terminated instance continues "
+                          "to exist as an orphan and is no longer used. "
+                          "(Only relevant if -c is used.)");
+    options.add_options()("h,help", "print usage");
+    options.add_options()("v,version", "print version information");
+    options.add_options()("license", "show licenses");
 
     cxxopts::ParseResult args;
     try {
@@ -178,8 +193,9 @@ int main(int argc, char **argv) {
     }
 
     std::unique_ptr<cxxshm::SharedMemory> shm;
+    const bool                            ARG_CREATE = args.count("create");
 
-    if (args.count("create")) {
+    if (ARG_CREATE) {
         const auto shm_size      = args["create"].as<std::size_t>();
         const auto shm_exclusive = !args.count("force");
         const auto shm_mode_str  = args["permissions"].as<std::string>();
@@ -235,12 +251,36 @@ int main(int argc, char **argv) {
         return EX_DATAERR;
     }
 
+    std::unique_ptr<cxxsemaphore::Semaphore> semaphore;
+    timespec                                 semaphore_max_time {0, 0};
+
+    if (args.count("semaphore")) {
+        const auto semaphore_name = args["semaphore"].as<std::string>();
+
+        try {
+            if (ARG_CREATE) {
+                const bool force = args.count("semaphore-force");
+                semaphore        = std::make_unique<cxxsemaphore::Semaphore>(semaphore_name, 1, force);
+            } else {
+                semaphore = std::make_unique<cxxsemaphore::Semaphore>(semaphore_name);
+            }
+        } catch (const std::exception &e) {
+            std::cerr << e.what() << std::endl;
+            return EX_SOFTWARE;
+        }
+
+        semaphore_max_time = {static_cast<__time_t>((random_interval_ms / 2) / 1000),
+                              static_cast<__syscall_slong_t>(((random_interval_ms / 2) % 1000) * 1000000)};
+    }
+
     // MAIN loop
+    // FIXME: semaphore wait time --> better interval mechanism required!
     std::size_t counter = 0;
     switch (alignment) {
         case BYTE:
             while (!terminate) {
-                random_data<uint8_t>(shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask);
+                random_data<uint8_t>(
+                        shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -250,7 +290,8 @@ int main(int argc, char **argv) {
             break;
         case WORD:
             while (!terminate) {
-                random_data<uint16_t>(shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask);
+                random_data<uint16_t>(
+                        shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -260,7 +301,8 @@ int main(int argc, char **argv) {
             break;
         case DWORD:
             while (!terminate) {
-                random_data<uint32_t>(shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask);
+                random_data<uint32_t>(
+                        shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
@@ -270,7 +312,8 @@ int main(int argc, char **argv) {
             break;
         case QWORD:
             while (!terminate) {
-                random_data<uint64_t>(shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask);
+                random_data<uint64_t>(
+                        shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
                 nanosleep(&sleep_time, nullptr);
 
                 if (interval_counter) {
