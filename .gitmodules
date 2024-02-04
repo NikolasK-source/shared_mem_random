@@ -7,3 +7,6 @@
 [submodule "libs/cxxsemaphore"]
 	path = libs/cxxsemaphore
 	url = https://github.com/NikolasK-source/cxxsemaphore.git
+[submodule "libs/cxxitimer"]
+	path = libs/cxxitimer
+	url = https://github.com/NikolasK-source/cxxitimer.git
