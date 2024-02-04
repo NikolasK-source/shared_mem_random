@@ -5,6 +5,7 @@
 
 #include "license.hpp"
 
+#include "cxxitimer.hpp"
 #include "cxxsemaphore.hpp"
 #include "cxxshm.hpp"
 #include <algorithm>
@@ -179,8 +180,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    const auto  random_interval_ms = args["interval"].as<std::size_t>();
     const auto  interval_counter   = args["limit"].as<std::size_t>();
+    const auto  random_interval_ms = interval_counter != 1 ? args["interval"].as<std::size_t>() : 0;
     std::size_t bitmask            = ~static_cast<std::size_t>(0);  // no mask
 
     const auto mask_count = args.count("mask");
@@ -249,12 +250,6 @@ int main(int argc, char **argv) {
     if (OFFSET % args["alignment"].as<int>() != 0)
         std::cerr << "WARNING: Invalid alignment detected. Performance issues possible." << std::endl;
 
-
-    const struct timespec sleep_time {
-        static_cast<__time_t>(random_interval_ms / 1000),
-                static_cast<__syscall_slong_t>((random_interval_ms % 1000) * 1000000)
-    };
-
     std::size_t shm_elements = SIZE / static_cast<std::size_t>(alignment);
     if (args.count("elements")) { shm_elements = std::min(shm_elements, args["elements"].as<std::size_t>()); }
 
@@ -286,52 +281,71 @@ int main(int argc, char **argv) {
                               static_cast<__syscall_slong_t>(((random_interval_ms / 2) % 1000) * 1000000)};
     }
 
+    // interval timer
+    const struct timeval interval_time {
+        static_cast<__time_t>(random_interval_ms / 1000),
+                static_cast<__syscall_slong_t>((random_interval_ms % 1000) * 1000)
+    };
+    cxxitimer::ITimer_Real interval_timer(interval_time);
+    if (random_interval_ms) interval_timer.start();
+
+    sigset_t sleep_sigset;
+    sigemptyset(&sleep_sigset);
+    sigaddset(&sleep_sigset, SIGALRM);
+    sigprocmask(SIG_BLOCK, &sleep_sigset, nullptr);
+
     // MAIN loop
-    // FIXME: semaphore wait time --> better interval mechanism required!
     std::size_t counter = 0;
+
+    auto handle_counter = [&]() {
+        if (interval_counter) {
+            if (++counter >= interval_counter) return true;
+        }
+        return false;
+    };
+
+    auto handle_sleep = [&]() {
+        if (random_interval_ms == 0) return;
+
+        int  sig = 0;
+        auto tmp = sigwait(&sleep_sigset, &sig);
+        if (tmp == -1) {
+            perror("sigwait");
+            exit(EX_OSERR);
+        }
+    };
+
     switch (alignment) {
         case BYTE:
             while (!terminate) {
                 random_data<uint8_t>(
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
-                nanosleep(&sleep_time, nullptr);
-
-                if (interval_counter) {
-                    if (++counter > interval_counter) break;
-                }
+                handle_sleep();
+                if (handle_counter()) break;
             }
             break;
         case WORD:
             while (!terminate) {
                 random_data<uint16_t>(
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
-                nanosleep(&sleep_time, nullptr);
-
-                if (interval_counter) {
-                    if (++counter > interval_counter) break;
-                }
+                handle_sleep();
+                if (handle_counter()) break;
             }
             break;
         case DWORD:
             while (!terminate) {
                 random_data<uint32_t>(
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
-                nanosleep(&sleep_time, nullptr);
-
-                if (interval_counter) {
-                    if (++counter > interval_counter) break;
-                }
+                handle_sleep();
+                if (handle_counter()) break;
             }
             break;
         case QWORD:
             while (!terminate) {
                 random_data<uint64_t>(
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
-                nanosleep(&sleep_time, nullptr);
-
-                if (interval_counter) {
-                    if (++counter > interval_counter) break;
-                }
+                handle_sleep();
+                if (handle_counter()) break;
             }
             break;
     }
