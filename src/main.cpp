@@ -17,12 +17,17 @@
 #include <random>
 #include <sysexits.h>
 
+static constexpr std::size_t MAX_SEM_ERROR     = 1000;
+static constexpr std::size_t SEM_ERROR_INC     = 100;
+static std::size_t           sem_error_counter = 0;
+
 static volatile bool terminate = false;
 
 static void sig_term_handler(int) { terminate = true; }
 
 static std::random_device         rd;
 static std::default_random_engine re(rd());
+
 
 /*! \brief fill memory area with random data
  *
@@ -44,7 +49,13 @@ inline void random_data(void                                     *data,
         if (!semaphore->wait(semaphore_max_time)) {
             std::cerr << " WARNING: Failed to acquire semaphore '" << semaphore->get_name()
                       << "' within a half intervall" << std::endl;
-            // TODO semaphore error counter
+            sem_error_counter += SEM_ERROR_INC;
+            if (sem_error_counter >= MAX_SEM_ERROR) {
+                std::cerr << "ERROR: acquiring semaphore failed to often. Terminating...";
+                terminate = true;
+            }
+        } else {
+            if (sem_error_counter) --sem_error_counter;
         }
     }
 
