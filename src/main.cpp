@@ -47,16 +47,20 @@ inline void random_data(void                                     *data,
     static std::uniform_int_distribution<T> dist(0, std::numeric_limits<T>::max());
 
     if (semaphore) {
-        if (!semaphore->wait(semaphore_max_time)) {
-            std::cerr << " WARNING: Failed to acquire semaphore '" << semaphore->get_name()
-                      << "' within a half intervall" << std::endl;
-            sem_error_counter += SEM_ERROR_INC;
-            if (sem_error_counter >= MAX_SEM_ERROR) {
-                std::cerr << "ERROR: acquiring semaphore failed to often. Terminating...";
-                terminate = true;
-            }
+        if (semaphore_max_time.tv_sec == 0 && semaphore_max_time.tv_nsec == 0) {
+            semaphore->wait();
         } else {
-            if (sem_error_counter) --sem_error_counter;
+            if (!semaphore->wait(semaphore_max_time)) {
+                std::cerr << " WARNING: Failed to acquire semaphore '" << semaphore->get_name()
+                          << "' within a half intervall" << std::endl;
+                sem_error_counter += SEM_ERROR_INC;
+                if (sem_error_counter >= MAX_SEM_ERROR) {
+                    std::cerr << "ERROR: acquiring semaphore failed to often. Terminating...";
+                    terminate = true;
+                }
+            } else {
+                if (sem_error_counter) --sem_error_counter;
+            }
         }
     }
 
