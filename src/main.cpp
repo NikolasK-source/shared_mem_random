@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
     cxxopts::ParseResult args;
     try {
         args = options.parse(argc, argv);
-    } catch (cxxopts::OptionParseException &e) {
+    } catch (cxxopts::exceptions::parsing::exception &e) {
         std::cerr << "Failed to parse arguments: " << e.what() << '.' << std::endl;
         return EX_USAGE;
     }
