@@ -24,7 +24,9 @@ static std::size_t           sem_error_counter = 0;
 
 static volatile bool terminate = false;
 
-static void sig_term_handler(int) { terminate = true; }
+static void sig_term_handler(int) {
+    terminate = true;
+}
 
 static std::random_device         rd;
 static std::default_random_engine re(rd());
@@ -77,7 +79,7 @@ int main(int argc, char **argv) {
 
     options.add_options()("a,alignment",
                           "use the given byte alignment to generate random values. (1,2,4,8)",
-                          cxxopts::value<int>()->default_value("1"));
+                          cxxopts::value<unsigned>()->default_value("1"));
     options.add_options()("m,mask",
                           "optional bitmask (as hex value) that is applied to the generated random values",
                           cxxopts::value<std::string>());
@@ -171,7 +173,7 @@ int main(int argc, char **argv) {
         std::cerr << "Use '" << exe_name << " --help' for more information." << std::endl;
         return EX_USAGE;
     } else if (alignment_count == 1) {
-        const auto tmp = args["alignment"].as<int>();
+        const auto tmp = args["alignment"].as<unsigned>();
         switch (tmp) {
             case 1: alignment = BYTE; break;
             case 2: alignment = WORD; break;
@@ -222,7 +224,7 @@ int main(int argc, char **argv) {
         bool        fail = false;
         std::size_t idx  = 0;
         try {
-            mode = std::stoul(shm_mode_str, &idx, 0);
+            mode = static_cast<decltype(mode)>(std::stoul(shm_mode_str, &idx, 0));
         } catch (const std::exception &) { fail = true; }
         fail = fail || idx != shm_mode_str.size();
 
@@ -251,7 +253,7 @@ int main(int argc, char **argv) {
     if (OFFSET) std::cerr << " (Effective size: " << SIZE << (SIZE != 1 ? " bytes" : " byte") << ")";
     std::cerr << std::endl;
 
-    if (OFFSET % args["alignment"].as<int>() != 0)
+    if (OFFSET % args["alignment"].as<unsigned>() != 0)
         std::cerr << "WARNING: Invalid alignment detected. Performance issues possible." << std::endl;
 
     std::size_t shm_elements = SIZE / static_cast<std::size_t>(alignment);

@@ -1,17 +1,20 @@
+#
+# Copyright (C) 2020-2022 Nikolas Koesling <nikolas@koesling.info>.
+# This template is free software. You can redistribute it and/or modify it under the terms of the MIT License.
+#
+
 # ---------------------------------------- source files (*.cpp, *.cc, ...) ---------------------------------------------
 # ======================================================================================================================
 
-target_sources(${Target} PRIVATE main.cpp)
-target_sources(${Target} PRIVATE license.cpp)
+target_sources(${Target} PRIVATE version_info.cpp)
 
 
 # ---------------------------------------- header files (*.hpp, *.h, ...) ----------------------------------------------
 # ======================================================================================================================
 
-target_sources(${Target} PRIVATE license.hpp)
+target_sources(${Target} PRIVATE version_info.hpp)
 
 
 # ---------------------------------------- subdirectories --------------------------------------------------------------
 # ======================================================================================================================
 
-add_subdirectory(generated)
