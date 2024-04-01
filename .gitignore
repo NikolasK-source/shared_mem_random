@@ -1,6 +1,7 @@
 # general
 build*
 docs/*
+docs_doxy
 
 !docs/index.md
 !docs/_config.yml
@@ -465,3 +466,4 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+src/generated/version_info*
