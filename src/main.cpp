@@ -3,14 +3,15 @@
  * This program is free software. You can redistribute it and/or modify it under the terms of the MIT License.
  */
 
+#include "generated/version_info.hpp"
 #include "license.hpp"
 
-#include "cxxitimer.hpp"
-#include "cxxsemaphore.hpp"
-#include "cxxshm.hpp"
 #include <algorithm>
 #include <csignal>
+#include <cxxitimer.hpp>
 #include <cxxopts.hpp>
+#include <cxxsemaphore.hpp>
+#include <cxxshm.hpp>
 #include <fcntl.h>
 #include <filesystem>
 #include <iostream>
@@ -77,44 +78,53 @@ int main(int argc, char **argv) {  // NOLINT
     const std::string exe_name = std::filesystem::path(*argv).filename().string();
     cxxopts::Options  options(exe_name, "Write random values to a shared memory.");
 
-    options.add_options()("a,alignment",
-                          "use the given byte alignment to generate random values. (1,2,4,8)",
-                          cxxopts::value<unsigned>()->default_value("1"));
-    options.add_options()("m,mask",
-                          "optional bitmask (as hex value) that is applied to the generated random values",
-                          cxxopts::value<std::string>());
-    options.add_options()("n,name", "mandatory name of the shared memory object", cxxopts::value<std::string>());
-    options.add_options()("i,interval",
-                          "random value generation interval in milliseconds",
-                          cxxopts::value<std::size_t>()->default_value("1000"));
-    options.add_options()("l,limit",
-                          "random interval limit. Use 0 for no limit (--> run until SIGINT / SIGTERM).",
-                          cxxopts::value<std::size_t>()->default_value("0"));
-    options.add_options()("o,offset",
-                          "skip the first arg bytes of the shared memory",
-                          cxxopts::value<std::size_t>()->default_value("0"));
-    options.add_options()("e,elements",
-                          "maximum number of elements to work on (size depends on alignment)",
-                          cxxopts::value<std::size_t>());
-    options.add_options()("c,create", "create shared memory with given size in byte", cxxopts::value<std::size_t>());
-    options.add_options()("force", "create shared memory even if it exists. (Only relevant if -c is used.)");
-    options.add_options()("p,permissions",
-                          "permission bits that are applied when creating a shared memory. "
-                          "(Only relevant if -c is used.) Default: 0660",
-                          cxxopts::value<std::string>()->default_value("0660"));
-    options.add_options()("semaphore",
-                          "protect the shared memory with a named semaphore against simultaneous access. "
-                          "If -c is used, the semaphore is created, otherwise an existing semaphore is required.",
-                          cxxopts::value<std::string>());
-    options.add_options()("semaphore-force",
-                          "Force the use of the semaphore even if it already exists. "
-                          "Do not use this option per default! "
-                          "It should only be used if the semaphore of an improperly terminated instance continues "
-                          "to exist as an orphan and is no longer used. "
-                          "(Only relevant if -c is used.)");
-    options.add_options()("h,help", "print usage");
-    options.add_options()("v,version", "print version information");
-    options.add_options()("license", "show licenses");
+    options.add_options("settings")("a,alignment",
+                                    "use the given byte alignment to generate random values. (1,2,4,8)",
+                                    cxxopts::value<unsigned>()->default_value("1"));
+    options.add_options("settings")("m,mask",
+                                    "optional bitmask (as hex value) that is applied to the generated random values",
+                                    cxxopts::value<std::string>());
+    options.add_options("shared memory")(
+            "n,name", "mandatory name of the shared memory object", cxxopts::value<std::string>());
+    options.add_options("settings")("i,interval",
+                                    "random value generation interval in milliseconds",
+                                    cxxopts::value<std::size_t>()->default_value("1000"));
+    options.add_options("settings")("l,limit",
+                                    "random interval limit. Use 0 for no limit (--> run until SIGINT / SIGTERM).",
+                                    cxxopts::value<std::size_t>()->default_value("0"));
+    options.add_options("settings")("o,offset",
+                                    "skip the first arg bytes of the shared memory",
+                                    cxxopts::value<std::size_t>()->default_value("0"));
+    options.add_options("settings")("e,elements",
+                                    "maximum number of elements to work on (size depends on alignment)",
+                                    cxxopts::value<std::size_t>());
+    options.add_options("shared memory")(
+            "c,create", "create shared memory with given size in byte", cxxopts::value<std::size_t>());
+    options.add_options("shared memory")("force",
+                                         "create shared memory even if it exists. (Only relevant if -c is used.)");
+    options.add_options("shared memory")("p,permissions",
+                                         "permission bits that are applied when creating a shared memory. "
+                                         "(Only relevant if -c is used.) Default: 0660",
+                                         cxxopts::value<std::string>()->default_value("0660"));
+    options.add_options("shared memory")(
+            "semaphore",
+            "protect the shared memory with a named semaphore against simultaneous access. "
+            "If -c is used, the semaphore is created, otherwise an existing semaphore is required.",
+            cxxopts::value<std::string>());
+    options.add_options("shared memory")(
+            "semaphore-force",
+            "Force the use of the semaphore even if it already exists. "
+            "Do not use this option per default! "
+            "It should only be used if the semaphore of an improperly terminated instance continues "
+            "to exist as an orphan and is no longer used. "
+            "(Only relevant if -c is used.)");
+    options.add_options("other")("h,help", "print usage");
+    options.add_options("version information")("version", "print version and exit");
+    options.add_options("version information")("longversion",
+                                               "print version (including compiler and system info) and exit");
+    options.add_options("version information")("shortversion", "print version (only version string) and exit");
+    options.add_options("version information")("git-hash", "print git hash");
+    options.add_options("other")("license", "show licenses");
 
     cxxopts::ParseResult args;
     try {
@@ -140,9 +150,30 @@ int main(int argc, char **argv) {  // NOLINT
     }
 
     // print version
+    if (args.count("shortversion")) {
+        std::cout << PROJECT_VERSION << '\n';
+        return EX_OK;
+    }
+
     if (args.count("version")) {
-        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << " (compiled with " << COMPILER_INFO << " on "
-                  << SYSTEM_INFO << ')' << '\n';
+        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << '\n';
+        return EX_OK;
+    }
+
+    if (args.count("longversion")) {
+        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << '\n';
+        std::cout << "   compiled with " << COMPILER_INFO << '\n';
+        std::cout << "   on system " << SYSTEM_INFO
+#ifndef OS_LINUX
+                  << "-nonlinux"
+#endif
+                  << '\n';
+        std::cout << "   from git commit " << RCS_HASH << '\n';
+        return EX_OK;
+    }
+
+    if (args.count("git-hash")) {
+        std::cout << RCS_HASH << '\n';
         return EX_OK;
     }
 
