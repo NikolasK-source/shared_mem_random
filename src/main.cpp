@@ -17,6 +17,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <sys/ioctl.h>
 #include <sysexits.h>
 
 static constexpr std::size_t MAX_SEM_ERROR     = 1000;
@@ -135,7 +136,15 @@ int main(int argc, char **argv) {  // NOLINT
     }
 
     if (args.count("help")) {
-        options.set_width(120);  // NOLINT
+        static constexpr std::size_t MIN_HELP_SIZE = 80;
+        if (isatty(STDIN_FILENO)) {
+            struct winsize w {};
+            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != -1) {  // NOLINT
+                options.set_width(std::max(static_cast<decltype(w.ws_col)>(MIN_HELP_SIZE), w.ws_col));
+            }
+        } else {
+            options.set_width(MIN_HELP_SIZE);
+        }
         std::cout << options.help() << '\n';
         std::cout << '\n';
         std::cout << "Note: If specified, the offset should be an integer multiple of alignment." << '\n';
