@@ -126,6 +126,8 @@ int main(int argc, char **argv) {  // NOLINT
     options.add_options("version information")("shortversion", "print version (only version string) and exit");
     options.add_options("version information")("git-hash", "print git hash");
     options.add_options("other")("license", "show licenses");
+    options.add_options("shared_memory")(
+            "pid", "terminate application if application with given pid is terminated.", cxxopts::value<pid_t>());
 
     cxxopts::ParseResult args;
     try {
@@ -253,7 +255,9 @@ int main(int argc, char **argv) {  // NOLINT
     }
 
     std::unique_ptr<cxxshm::SharedMemory> shm;
-    const bool                            ARG_CREATE = args.count("create");
+    const bool                            ARG_CREATE        = args.count("create");
+    pid_t                                 shm_owner_pid     = 0;
+    bool                                  use_shm_owner_pid = false;
 
     if (ARG_CREATE) {
         const auto shm_size      = args["create"].as<std::size_t>();
@@ -283,12 +287,28 @@ int main(int argc, char **argv) {  // NOLINT
             std::cerr << e.what() << '\n';
             return EX_OSERR;
         }
+
+        if (args.count("pid") == 0) {
+            if (interval_counter != 1) {
+                std::cerr << "Warning: No SHM owner PID provided.\n"
+                             "         This application is NOT terminated if the owner of the shared memory closes the "
+                             "shared memory.\n"
+                             "         This application WILL NOT reconnect to the shared memory if it is recreated.\n"
+                             "         Use --pid to specify the PID of the SHM owner.\n";
+                std::cerr << std::flush;
+            }
+        } else {
+            if (interval_counter != 1) {
+                shm_owner_pid     = args["pid"].as<pid_t>();
+                use_shm_owner_pid = true;
+            }
+        }
     }
 
     const auto OFFSET = args["offset"].as<std::size_t>();
     const auto SIZE   = OFFSET > shm->get_size() ? 0 : (shm->get_size() - OFFSET);
 
-    std::cerr << "Opened shared memory '" << shm_name << "'. Size: " << shm->get_size()
+    std::cerr << "INFO: Opened shared memory '" << shm_name << "'. Size: " << shm->get_size()
               << (shm->get_size() != 1 ? " bytes" : " byte") << '.';
     if (OFFSET) std::cerr << " (Effective size: " << SIZE << (SIZE != 1 ? " bytes" : " byte") << ")";
     std::cerr << '\n';
@@ -325,6 +345,12 @@ int main(int argc, char **argv) {  // NOLINT
 
         semaphore_max_time = {static_cast<__time_t>((random_interval_ms / 2) / 1000),                        // NOLINT
                               static_cast<__syscall_slong_t>(((random_interval_ms / 2) % 1000) * 1000000)};  // NOLINT
+    } else {
+        std::cerr << "WARNING: No semaphore specified.\n"
+                     "         Concurrent access to the shared memory is possible.\n"
+                     "         This can result in CORRUPTED DATA.\n"
+                     "         Use --semaphore to specify a semaphore.\n";
+        std::cerr << std::flush;
     }
 
     // interval timer
@@ -350,6 +376,22 @@ int main(int argc, char **argv) {  // NOLINT
         return false;
     };
 
+    auto check_owner_pid = [&]() {
+        if (!use_shm_owner_pid) return false;
+
+        int tmp = kill(shm_owner_pid, 0);
+        if (tmp == -1) {
+            if (errno == ESRCH) {
+                std::cerr << "SHM owner (pid=" << shm_owner_pid << ") no longer alive.\n" << std::flush;
+            } else {
+                perror("failed to send signal to the SHM owner client");
+            }
+            return true;
+        }
+
+        return false;
+    };
+
     auto handle_sleep = [&]() {
         if (random_interval_ms == 0) return;
 
@@ -368,6 +410,7 @@ int main(int argc, char **argv) {  // NOLINT
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
                 handle_sleep();
                 if (handle_counter()) break;
+                if (check_owner_pid()) break;
             }
             break;
         case WORD:
@@ -376,6 +419,7 @@ int main(int argc, char **argv) {  // NOLINT
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
                 handle_sleep();
                 if (handle_counter()) break;
+                if (check_owner_pid()) break;
             }
             break;
         case DWORD:
@@ -384,6 +428,7 @@ int main(int argc, char **argv) {  // NOLINT
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
                 handle_sleep();
                 if (handle_counter()) break;
+                if (check_owner_pid()) break;
             }
             break;
         case QWORD:
@@ -392,6 +437,7 @@ int main(int argc, char **argv) {  // NOLINT
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
                 handle_sleep();
                 if (handle_counter()) break;
+                if (check_owner_pid()) break;
             }
             break;
     }
