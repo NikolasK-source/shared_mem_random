@@ -365,6 +365,8 @@ int main(int argc, char **argv) {  // NOLINT
     sigemptyset(&sleep_sigset);
     sigaddset(&sleep_sigset, SIGALRM);
     sigprocmask(SIG_BLOCK, &sleep_sigset, nullptr);
+    sigaddset(&sleep_sigset, SIGINT);
+    sigaddset(&sleep_sigset, SIGTERM);
 
     // MAIN loop
     std::size_t counter = 0;
@@ -393,7 +395,7 @@ int main(int argc, char **argv) {  // NOLINT
     };
 
     auto handle_sleep = [&]() {
-        if (random_interval_ms == 0) return;
+        if (random_interval_ms == 0) return false;
 
         int  sig = 0;
         auto tmp = sigwait(&sleep_sigset, &sig);
@@ -401,6 +403,8 @@ int main(int argc, char **argv) {  // NOLINT
             perror("sigwait");
             exit(EX_OSERR);
         }
+
+        return sig != SIGALRM;
     };
 
     switch (alignment) {
@@ -408,7 +412,7 @@ int main(int argc, char **argv) {  // NOLINT
             while (!terminate) {
                 random_data<uint8_t>(
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
-                handle_sleep();
+                if (handle_sleep()) break;
                 if (handle_counter()) break;
                 if (check_owner_pid()) break;
             }
@@ -417,7 +421,7 @@ int main(int argc, char **argv) {  // NOLINT
             while (!terminate) {
                 random_data<uint16_t>(
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
-                handle_sleep();
+                if (handle_sleep()) break;
                 if (handle_counter()) break;
                 if (check_owner_pid()) break;
             }
@@ -426,7 +430,7 @@ int main(int argc, char **argv) {  // NOLINT
             while (!terminate) {
                 random_data<uint32_t>(
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
-                handle_sleep();
+                if (handle_sleep()) break;
                 if (handle_counter()) break;
                 if (check_owner_pid()) break;
             }
@@ -435,7 +439,7 @@ int main(int argc, char **argv) {  // NOLINT
             while (!terminate) {
                 random_data<uint64_t>(
                         shm->get_addr<uint8_t *>() + OFFSET, shm_elements, bitmask, semaphore, semaphore_max_time);
-                handle_sleep();
+                if (handle_sleep()) break;
                 if (handle_counter()) break;
                 if (check_owner_pid()) break;
             }
